@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Workout Plan</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(to bottom right, #0f0f0f, #1a1a1a);
+      color: #f0f0f0;
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      background: #1f1f1f;
+      padding: 1rem;
+      text-align: center;
+      font-size: 1.7rem;
+      font-weight: bold;
+      box-shadow: 0 0 15px #00ffc3;
+    }
+    .container {
+      padding: 1rem;
+      max-width: 900px;
+      margin: auto;
+    }
+    .exercise-group {
+      margin-bottom: 2rem;
+      background: #161616;
+      border-radius: 10px;
+      box-shadow: 0 0 15px rgba(0, 255, 195, 0.1);
+      padding: 1rem;
+    }
+    .exercise-group h3 {
+      border-bottom: 1px solid #444;
+      margin-bottom: 0.5rem;
+      padding-bottom: 0.3rem;
+      font-size: 1.2rem;
+    }
+    .exercise {
+      background: #1a1a1a;
+      border-radius: 10px;
+      padding: 1rem;
+      margin-bottom: 0.7rem;
+      box-shadow: 0 0 10px rgba(0, 255, 195, 0.15);
+      position: relative;
+    }
+    .exercise input {
+      width: calc(100% - 2rem);
+      padding: 0.5rem;
+      margin-top: 0.3rem;
+      background: #2a2a2a;
+      border: none;
+      color: #fff;
+      border-radius: 5px;
+      font-size: 0.95rem;
+    }
+    .delete-btn,
+    .delete-field-btn {
+      background: transparent;
+      border: none;
+      color: red;
+      font-size: 1.2rem;
+      cursor: pointer;
+    }
+    .delete-field-btn {
+      font-size: 1rem;
+      margin-left: 0.5rem;
+    }
+    .add-group-exercise-btn,
+    .toggle-edit-mode-btn,
+    .add-field-btn {
+      background: #00ffc3;
+      color: #000;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      font-weight: bold;
+      cursor: pointer;
+      margin: 0.3rem 0.5rem 0.5rem 0;
+    }
+    nav {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      background: #1f1f1f;
+      padding: 1rem 0;
+      gap: 0.5rem;
+    }
+    nav button {
+      background: transparent;
+      border: none;
+      color: #fff;
+      font-size: 1rem;
+      cursor: pointer;
+      padding: 0.5rem 1rem;
+      border-radius: 5px;
+    }
+    nav button.active {
+      background-color: #00ffc3;
+      color: #000;
+      font-weight: bold;
+    }
+    .toast {
+      position: fixed;
+      bottom: 1rem;
+      right: 1rem;
+      background: #00ffc3;
+      color: #000;
+      padding: 0.8rem 1.2rem;
+      border-radius: 5px;
+      box-shadow: 0 0 10px #00ffc3;
+      font-weight: bold;
+    }
+    a {
+      color: #00ffc3;
+      text-decoration: none;
+      font-weight: bold;
+      margin-left: 0.5rem;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <header>💪🏻 Workout 🏋🏻‍♂️</header>
+  <nav id="day-nav"></nav>
+  <div class="container">
+    <div id="day-container"></div>
+    <button class="toggle-edit-mode-btn" onclick="toggleEditMode()">✏️ Edit Mode: <span id="edit-label">Off</span></button>
+  </div>
+  <div id="toast" class="toast" style="display: none;">Gespeichert ✅</div>
+
+  <script>
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Info'];
+    const dayMuscleGroups = {
+      Monday: ['Chest', 'Shoulders', 'Triceps'],
+      Tuesday: ['Back', 'Biceps', 'Neck'],
+      Wednesday: ['Legs', 'Core'],
+      Thursday: ['Chest', 'Triceps'],
+      Friday: ['Back', 'Biceps', 'Forearms'],
+      Saturday: ['Jogging', 'Core'],
+      Info: ['Links']
+    };
+
+    let currentDay = 'Monday';
+    let editMode = false;
+    let saveTimeout;
+
+    // ✅ Sicher initialisieren
+    let workoutData = JSON.parse(localStorage.getItem('workoutData')) || {};
+    workoutData = {
+      Monday: [],
+      Tuesday: [],
+      Wednesday: [],
+      Thursday: [],
+      Friday: [],
+      Saturday: [],
+      Info: [{ link: [] }],
+      ...workoutData
+    };
+    if (!Array.isArray(workoutData.Info)) workoutData.Info = [{ link: [] }];
+    if (!Array.isArray(workoutData.Info[0].link)) workoutData.Info[0].link = [];
+
+    const nav = document.getElementById('day-nav');
+    const dayContainer = document.getElementById('day-container');
+    const editLabel = document.getElementById('edit-label');
+    const toast = document.getElementById('toast');
+
+    function showToast() {
+      toast.style.display = 'block';
+      setTimeout(() => toast.style.display = 'none', 3000);
+    }
+
+    function debounceSave() {
+      clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(() => {
+        localStorage.setItem('workoutData', JSON.stringify(workoutData));
+        showToast();
+      }, 1000);
+    }
+
+    function renderNav() {
+      nav.innerHTML = '';
+      days.forEach(day => {
+        const btn = document.createElement('button');
+        btn.textContent = day;
+        if (day === currentDay) btn.classList.add('active');
+        btn.onclick = () => {
+          currentDay = day;
+          renderNav();
+          renderDay();
+        };
+        nav.appendChild(btn);
+      });
+    }
+
+    function renderDay() {
+      dayContainer.innerHTML = '';
+      const exercises = workoutData[currentDay] || [];
+      const groups = dayMuscleGroups[currentDay];
+
+      if (groups.includes('Links')) {
+        const groupDiv = document.createElement('div');
+        groupDiv.className = 'exercise-group';
+        groupDiv.innerHTML = `<h3>📌 Info Links</h3>`;
+
+        const ex = workoutData.Info[0];
+        ex.link.forEach((val, i) => {
+          const linkDiv = document.createElement('div');
+          linkDiv.className = 'exercise';
+          linkDiv.innerHTML = `
+            <div>
+              <strong>Link:</strong>
+              <input value="${val}" onchange="updateInfoLink(${i}, this.value)" />
+              ${val ? `<a href="${val}" target="_blank">🎬 Open</a>` : ''}
+              <button class="delete-field-btn" onclick="removeInfoLink(${i})">🗑️</button>
+            </div>
+          `;
+          groupDiv.appendChild(linkDiv);
+        });
+
+        const addBtn = document.createElement('button');
+        addBtn.className = 'add-group-exercise-btn';
+        addBtn.textContent = '➕ Link';
+        addBtn.onclick = () => {
+          workoutData.Info[0].link.push('');
+          saveAndRender();
+        };
+        groupDiv.appendChild(addBtn);
+
+        dayContainer.appendChild(groupDiv);
+        return;
+      }
+
+      groups.forEach(group => {
+        const groupDiv = document.createElement('div');
+        groupDiv.className = 'exercise-group';
+        groupDiv.innerHTML = `<h3>${group === 'Jogging' ? '👟 ' : ''}${group}</h3>`;
+
+        const groupExercises = exercises
+          .map((ex, i) => ({ ...ex, index: i }))
+          .filter(ex => ex.group === group);
+
+        groupExercises.forEach(ex => {
+          const exDiv = document.createElement('div');
+          exDiv.className = 'exercise';
+
+          let html = '';
+          const delBtn = `<button class="delete-btn" onclick="confirmDelete('${currentDay}', ${ex.index})">🗑️</button>`;
+          const moveBtns = editMode ? `
+            <button class="delete-field-btn" onclick="moveExercise('${currentDay}', ${ex.index}, -1)">⬆️</button>
+            <button class="delete-field-btn" onclick="moveExercise('${currentDay}', ${ex.index}, 1)">⬇️</button>
+          ` : '';
+
+          html += delBtn + moveBtns;
+
+          if (group === 'Jogging') {
+            html += `
+              <div><strong>Kilometers:</strong> <input value="${ex.name}" onchange="updateExercise('${currentDay}', ${ex.index}, 'name', this.value)" /></div>
+              <div><strong>Time:</strong> <input value="${ex.weight}" onchange="updateExercise('${currentDay}', ${ex.index}, 'weight', this.value)" /></div>`;
+          } else {
+            html += `<div><strong>Exercise:</strong> <input value="${ex.name}" onchange="updateExercise('${currentDay}', ${ex.index}, 'name', this.value)" /></div>`;
+
+            if (Array.isArray(ex.weight)) {
+              ex.weight.forEach((val, i) => {
+                html += `<div><strong>Weight:</strong> <input value="${val}" onchange="updateWeight('${currentDay}', ${ex.index}, ${i}, this.value)" />
+                  <button class='delete-field-btn' onclick='removeWeight("${currentDay}", ${ex.index}, ${i})'>🗑️</button>
+                </div>`;
+              });
+            } else {
+              html += `<div><strong>Weight:</strong> <input value="${ex.weight}" onchange="updateExercise('${currentDay}', ${ex.index}, 'weight', this.value)" /></div>`;
+            }
+
+            if (Array.isArray(ex.reps)) {
+              ex.reps.forEach((val, i) => {
+                html += `<div><strong>Reps:</strong> <input value="${val}" onchange="updateReps('${currentDay}', ${ex.index}, ${i}, this.value)" />
+                  <button class='delete-field-btn' onclick='removeReps("${currentDay}", ${ex.index}, ${i})'>🗑️</button>
+                </div>`;
+              });
+            }
+
+            if (Array.isArray(ex.link)) {
+              ex.link.forEach((val, i) => {
+                html += `<div><strong>Video:</strong> <input value="${val}" onchange="updateLink('${currentDay}', ${ex.index}, ${i}, this.value)" />
+                  <a href="${val}" target="_blank">🎬 Open</a>
+                  <button class='delete-field-btn' onclick='removeLink("${currentDay}", ${ex.index}, ${i})'>🗑️</button>
+                </div>`;
+              });
+            } else {
+              html += `<div>
+                <strong>Video:</strong>
+                <input value="${ex.link}" onchange="updateExercise('${currentDay}', ${ex.index}, 'link', this.value)" />
+                ${ex.link ? `<a href="${ex.link}" target="_blank">🎬 Open</a>` : ''}
+              </div>`;
+            }
+
+            if (editMode) {
+              html += `<button class='add-field-btn' onclick='addWeight(${ex.index})'>➕ Weight</button>
+                       <button class='add-field-btn' onclick='addReps(${ex.index})'>➕ Reps</button>
+                       <button class='add-field-btn' onclick='addLink(${ex.index})'>➕ Video</button>`;
+            }
+          }
+
+          exDiv.innerHTML = html;
+          groupDiv.appendChild(exDiv);
+        });
+
+        const addBtn = document.createElement('button');
+        addBtn.className = 'add-group-exercise-btn';
+        addBtn.textContent = '+ Add Exercise';
+        addBtn.onclick = () => addExerciseToGroup(group);
+        groupDiv.appendChild(addBtn);
+
+        dayContainer.appendChild(groupDiv);
+      });
+    }
+
+    function updateWeight(day, index, i, value) {
+      workoutData[day][index].weight[i] = value;
+      debounceSave();
+    }
+    function updateReps(day, index, i, value) {
+      workoutData[day][index].reps[i] = value;
+      debounceSave();
+    }
+    function updateLink(day, index, i, value) {
+      workoutData[day][index].link[i] = value;
+      debounceSave();
+    }
+    function removeWeight(day, index, i) {
+      if (confirm("Delete this weight field?")) {
+        workoutData[day][index].weight.splice(i, 1);
+        saveAndRender();
+      }
+    }
+    function removeReps(day, index, i) {
+      if (confirm("Delete this reps field?")) {
+        workoutData[day][index].reps.splice(i, 1);
+        saveAndRender();
+      }
+    }
+    function removeLink(day, index, i) {
+      if (confirm("Delete this video field?")) {
+        workoutData[day][index].link.splice(i, 1);
+        saveAndRender();
+      }
+    }
+    function addWeight(index) {
+      const item = workoutData[currentDay][index];
+      item.weight = Array.isArray(item.weight) ? item.weight : [item.weight || ''];
+      item.weight.push('');
+      saveAndRender();
+    }
+    function addReps(index) {
+      const item = workoutData[currentDay][index];
+      item.reps = Array.isArray(item.reps) ? item.reps : [];
+      item.reps.push('');
+      saveAndRender();
+    }
+    function addLink(index) {
+      const item = workoutData[currentDay][index];
+      item.link = Array.isArray(item.link) ? item.link : [item.link || ''];
+      item.link.push('');
+      saveAndRender();
+    }
+    function updateExercise(day, index, key, value) {
+      workoutData[day][index][key] = value;
+      debounceSave();
+    }
+    function confirmDelete(day, index) {
+      if (confirm("Are you sure you want to delete this exercise?")) {
+        workoutData[day].splice(index, 1);
+        saveAndRender();
+      }
+    }
+    function addExerciseToGroup(group) {
+      workoutData[currentDay].push({ name: '', weight: '', link: '', group });
+      saveAndRender();
+    }
+    function toggleEditMode() {
+      editMode = !editMode;
+      editLabel.textContent = editMode ? 'On' : 'Off';
+      renderDay();
+    }
+    function saveAndRender() {
+      localStorage.setItem('workoutData', JSON.stringify(workoutData));
+      renderDay();
+    }
+    function moveExercise(day, index, direction) {
+      const exercises = workoutData[day];
+      const current = exercises[index];
+      const targetIndex = index + direction;
+      if (
+        targetIndex >= 0 &&
+        targetIndex < exercises.length &&
+        exercises[targetIndex].group === current.group
+      ) {
+        [exercises[index], exercises[targetIndex]] = [exercises[targetIndex], exercises[index]];
+        saveAndRender();
+      }
+    }
+    function updateInfoLink(index, value) {
+      workoutData.Info[0].link[index] = value;
+      debounceSave();
+    }
+    function removeInfoLink(index) {
+      if (confirm("Delete this link?")) {
+        workoutData.Info[0].link.splice(index, 1);
+        saveAndRender();
+      }
+    }
+
+    renderNav();
+    renderDay();
+  </script>
+</body>
+</html>
